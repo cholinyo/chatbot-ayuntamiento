@@ -15,7 +15,8 @@ def extraer_texto_web(url: str, selectores: list = None) -> list:
 
     Parámetros:
         url (str): URL de la página web municipal a raspar
-        selectores (list): lista opcional de etiquetas HTML a conservar (por defecto: ['p', 'h1', 'h2'])
+        selectores (list): lista opcional de etiquetas HTML a conservar 
+                           (por defecto: ['p', 'h1', 'h2'])
 
     Retorna:
         list: fragmentos limpios de texto extraído
@@ -29,15 +30,23 @@ def extraer_texto_web(url: str, selectores: list = None) -> list:
 
         # Etiquetas por defecto si no se especifican
         if selectores is None:
-            selectores = ['p', 'h1', 'h2', 'h3',]
+            selectores = ['p', 'h1', 'h2']
 
-        # Extraemos y limpiamos el texto de las etiquetas deseadas
         fragmentos = []
+        total_por_etiqueta = {}
+
         for tag in selectores:
-            for elemento in soup.find_all(tag):
+            elementos = soup.find_all(tag)
+            total_por_etiqueta[tag] = 0
+            for elemento in elementos:
                 texto = elemento.get_text(strip=True)
-                if texto and len(texto) > 30:  # Filtramos fragmentos demasiado cortos
+                if texto and len(texto) > 30:  # Ignora fragmentos muy cortos
                     fragmentos.append(texto)
+                    total_por_etiqueta[tag] += 1
+
+        print(f"🔍 {url} → {len(fragmentos)} fragmentos extraídos.")
+        for etiqueta, cantidad in total_por_etiqueta.items():
+            print(f"   • {etiqueta}: {cantidad} fragmentos")
 
         return fragmentos
 
@@ -45,9 +54,9 @@ def extraer_texto_web(url: str, selectores: list = None) -> list:
         print(f"❌ Error al procesar la URL {url}: {e}")
         return []
 
-# Ejemplo de uso (para pruebas locales):
+# Prueba manual del módulo (ejecutable directo)
 if __name__ == "__main__":
     url = "https://www.onda.es/"
-    fragmentos = extraer_texto_web(url)
+    fragmentos = extraer_texto_web(url, selectores=['p', 'h1', 'h2', 'article', 'section', 'div'])
     for i, f in enumerate(fragmentos[:5]):
-        print(f"\nFragmento {i+1}:", f)
+        print(f"\nFragmento {i+1}:\n{f}")

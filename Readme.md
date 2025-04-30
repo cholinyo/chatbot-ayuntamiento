@@ -23,6 +23,9 @@ Este proyecto implementa un **chatbot de asistencia ciudadana**, diseñado para 
 | Generación de embeddings | **Sentence Transformers** (`all-MiniLM-L6-v2`) | Rápido, preciso y ejecutable localmente |
 | Vector DB (retrieval) | **FAISS** | Almacenamiento y recuperación de vectores eficiente y local |
 | LLM (a integrar) | OpenAI / Llama2 / Mistral (opcional) | Dependiendo del entorno: nube o local |
+| Ingesta de sitios web | BeautifulSoup + requests | Permite raspar contenido de webs del Ayuntamiento |
+| Crawling automático | Código propio (`domain_crawler.py`) | Rastrea páginas internas de un dominio limitado |
+| Variables de configuración | `.env` + `python-dotenv` | Permite cambiar el dominio sin editar código |
 | Interfaz web | HTML + JS | Para integración web sencilla con el backend Flask |
 | Seguridad (futura) | Presidio / LLM Guard | Para detección y eliminación de datos personales |
 
@@ -36,10 +39,14 @@ chatbot-ayuntamiento/
 ├── app/
 │   ├── __init__.py
 │   ├── rag_engine.py          # Módulo de RAG con FAISS
-│   └── ingestion.py           # (próximo) carga de datos desde web/API
+│   ├── ingestion.py           # Módulo de carga de datos desde webs municipales
+│   ├── vector_indexing.py     # Vectorización y búsqueda semántica
+│   ├── domain_crawler.py      # Rastreo de URLs internas del dominio municipal
+│   └── api_loader.py          # (próximo) Conexión a API de trámites administrativos
 ├── templates/
 │   └── chat.html              # Interfaz de usuario web
 ├── static/                    # CSS y JS (opcional)
+├── .env                       # Configuración del dominio (ej. DOMINIO_AYUNTAMIENTO)
 ├── venv/                      # Entorno virtual (no incluido en repo)
 ├── requirements.txt           # Dependencias del proyecto
 └── README.md                  # Documentación y decisiones
@@ -54,6 +61,9 @@ chatbot-ayuntamiento/
 - **Flask** como backend: fácil de desplegar y controlar.
 - Modularización del código: `app/` contiene lógica separada para escalar fácilmente.
 - Interfaz web minimalista para pruebas iniciales: se podrá reemplazar por integraciones con sede electrónica o bots.
+- **Ingesta de webs municipales** mediante `requests + BeautifulSoup` para capturar contenido útil dentro del dominio institucional.
+- **Crawler automático** para recorrer un dominio completo del Ayuntamiento.
+- **Variables en `.env`** para configurar el dominio municipal sin modificar el código.
 
 ---
 
@@ -71,17 +81,27 @@ python -m venv venv
 venv\Scripts\activate    # En Windows
 ```
 
-3. Instala las dependencias:
+3. Crea un archivo `.env` en la raíz del proyecto con el dominio del Ayuntamiento:
+```
+DOMINIO_AYUNTAMIENTO=https://www.onda.es
+```
+
+4. Instala las dependencias:
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Ejecuta la aplicación Flask:
+5. Si falta alguna dependencia como BeautifulSoup o requests, puedes instalarlas con:
+```bash
+pip install beautifulsoup4 requests
+```
+
+6. Ejecuta la aplicación Flask:
 ```bash
 python app.py
 ```
 
-5. Accede desde el navegador a:
+7. Accede desde el navegador a:
 ```
 http://localhost:5000
 ```
@@ -91,7 +111,8 @@ http://localhost:5000
 ## 🔄 Futuras ampliaciones
 
 - [ ] Conexión a API REST de trámites administrativos
-- [ ] Ingesta de contenido desde webs municipales (crawler limitado por dominio)
+- [x] Ingesta de contenido desde webs municipales (crawler limitado por dominio)
+- [x] Configuración de dominio mediante archivo `.env`
 - [ ] Integración con grafo de conocimiento (Neo4j)
 - [ ] Sistema de detección y eliminación de datos personales (PII)
 - [ ] Reemplazo de LLM por modelos locales (Mistral, Llama2) ejecutados en Ollama
@@ -108,4 +129,3 @@ Este proyecto está siendo desarrollado con fines demostrativos para una futura 
 Si tienes preguntas o quieres colaborar, no dudes en contactar.
 
 **Licencia**: MIT o conforme a las directrices municipales.
-
