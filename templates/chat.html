@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Chatbot Ayuntamiento</title>
+</head>
+<body>
+    <h1>Asistente Ciudadano</h1>
+    <input id="pregunta" type="text" placeholder="Escribe tu pregunta...">
+    <button onclick="enviar()">Enviar</button>
+    <p id="respuesta"></p>
+
+    <script>
+        async function enviar() {
+            const pregunta = document.getElementById('pregunta').value;
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({pregunta})
+            });
+            const data = await response.json();
+            document.getElementById('respuesta').textContent = data.respuesta;
+        }
+    </script>
+</body>
+</html>
