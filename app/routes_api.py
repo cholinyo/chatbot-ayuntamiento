@@ -21,6 +21,5 @@ def chat_openai():
     pregunta = data.get("pregunta", "")
     if not pregunta:
         return jsonify({"error": "No se recibió pregunta."}), 400
-    respuesta = consultar_rag_con_openai(pregunta)
-    return jsonify({"respuesta": respuesta})
-
+    resultado = consultar_rag_con_openai(pregunta)
+    return jsonify(resultado)

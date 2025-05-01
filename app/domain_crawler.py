@@ -1,32 +1,20 @@
 # app/domain_crawler.py
 
 """
-Este módulo permite obtener automáticamente URLs internas desde un sitemap.xml
-asociado a un dominio municipal (ej. https://www.ayuntamiento.es/sitemap.xml).
-Es una alternativa más precisa y limpia al rastreo por enlaces HTML.
+Este módulo permite obtener URLs desde un sitemap.xml o rastrear enlaces internos
+empezando desde una URL base del dominio.
 """
 
 import os
 from dotenv import load_dotenv
 import requests
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import xml.etree.ElementTree as ET
+from bs4 import BeautifulSoup
 
 load_dotenv()
 
-
 def obtener_urls_desde_sitemap(url_sitemap: str, dominio_filtrado: str = None, max_paginas: int = 50) -> list:
-    """
-    Obtiene URLs desde un archivo sitemap XML.
-
-    Parámetros:
-        url_sitemap (str): URL completa del sitemap.xml
-        dominio_filtrado (str): dominio que deben contener las URLs (opcional)
-        max_paginas (int): número máximo de URLs a devolver
-
-    Retorna:
-        list: lista de URLs contenidas en el sitemap
-    """
     urls = []
     try:
         print(f"📄 Descargando sitemap: {url_sitemap}")
@@ -53,12 +41,33 @@ def obtener_urls_desde_sitemap(url_sitemap: str, dominio_filtrado: str = None, m
 
     return urls
 
+def crawl_dominio(url_inicial: str, max_paginas: int = 50) -> list:
+    visitadas = set()
+    pendientes = [url_inicial]
+    dominio = urlparse(url_inicial).netloc
 
-# Ejemplo de uso:
-if __name__ == "__main__":
-    DOMINIO = os.getenv("DOMINIO_AYUNTAMIENTO", "https://www.ayuntamiento.es")
-    SITEMAP_URL = f"{DOMINIO.rstrip('/')}/sitemap.xml"
-    dominio_base = urlparse(DOMINIO).netloc
-    urls = obtener_urls_desde_sitemap(SITEMAP_URL, dominio_filtrado=dominio_base, max_paginas=20)
-    for u in urls:
-        print(u)
+    while pendientes and len(visitadas) < max_paginas:
+        url = pendientes.pop(0)
+        if url in visitadas:
+            continue
+
+        try:
+            resp = requests.get(url, timeout=10)
+            if 'text/html' not in resp.headers.get('Content-Type', ''):
+                continue
+
+            visitadas.add(url)
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            enlaces = soup.find_all('a', href=True)
+
+            for enlace in enlaces:
+                href = enlace['href']
+                nueva_url = urljoin(url, href)
+                parsed = urlparse(nueva_url)
+                if parsed.netloc == dominio and nueva_url not in visitadas:
+                    pendientes.append(nueva_url)
+
+        except Exception as e:
+            print(f"❌ Error accediendo a {url}: {e}")
+
+    return list(visitadas)

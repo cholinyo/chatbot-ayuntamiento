@@ -4,54 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Comparativa RAG Local vs OpenAI</title>
-    <style>
-        body {
-            font-family: sans-serif;
-            background-color: #f9f9f9;
-            padding: 2rem;
-        }
-        h1 {
-            text-align: center;
-        }
-        #chat-box {
-            display: flex;
-            flex-direction: column;
-            max-width: 1000px;
-            margin: 2rem auto;
-            gap: 1.5rem;
-        }
-        .respuesta {
-            background: white;
-            padding: 1rem;
-            border-radius: 6px;
-            border: 1px solid #ddd;
-        }
-        .local {
-            border-left: 5px solid #3498db;
-        }
-        .openai {
-            border-left: 5px solid #2ecc71;
-        }
-        .etiqueta {
-            font-weight: bold;
-            margin-bottom: 0.3rem;
-        }
-        #input {
-            max-width: 1000px;
-            margin: 0 auto;
-            display: flex;
-            gap: 1rem;
-        }
-        #input input {
-            flex: 1;
-            padding: 0.7rem;
-            font-size: 1rem;
-        }
-        #input button {
-            padding: 0.7rem 1.5rem;
-            font-size: 1rem;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <h1>Comparativa RAG Local vs RAG+OpenAI</h1>
@@ -66,34 +19,54 @@
             const pregunta = document.getElementById("pregunta").value.trim();
             if (!pregunta) return;
 
-            document.getElementById("chat-box").innerHTML = "<p><em>Cargando respuestas...</em></p>";
-
-            const [resLocal, resOpenAI] = await Promise.all([
-                fetch("/api/chat", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ pregunta })
-                }).then(res => res.json()),
-                fetch("/api/chat_openai", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ pregunta })
-                }).then(res => res.json())
-            ]);
-
             const box = document.getElementById("chat-box");
-            box.innerHTML = "";
+            box.innerHTML = "<p><em>Cargando respuestas...</em></p>";
 
-            const local = document.createElement("div");
-            local.className = "respuesta local";
-            local.innerHTML = `<div class='etiqueta'>🧠 RAG Local</div><div>${resLocal.respuesta}</div>`;
+            try {
+                const [resLocal, resOpenAI] = await Promise.all([
+                    fetch("/api/chat", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ pregunta })
+                    }).then(res => res.ok ? res.json() : Promise.reject("RAG local falló")),
 
-            const openai = document.createElement("div");
-            openai.className = "respuesta openai";
-            openai.innerHTML = `<div class='etiqueta'>✨ RAG + OpenAI</div><div>${resOpenAI.respuesta}</div>`;
+                    fetch("/api/chat_openai", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ pregunta })
+                    }).then(res => res.ok ? res.json() : Promise.reject("OpenAI falló"))
+                ]);
 
-            box.appendChild(local);
-            box.appendChild(openai);
+                box.innerHTML = "";
+
+                // RAG Local
+                const local = document.createElement("div");
+                local.className = "respuesta local";
+                local.innerHTML = `<div class='etiqueta'>🧠 RAG Local</div><div>${resLocal.respuesta}</div>`;
+                if (resLocal.fragmentos && resLocal.fragmentos.length > 0) {
+                    const detallesLocal = document.createElement("details");
+                    detallesLocal.className = "contexto";
+                    detallesLocal.innerHTML = `<summary>📄 Fragmentos usados (RAG Local)</summary><pre>${resLocal.fragmentos.join("\n\n---\n\n")}</pre>`;
+                    local.appendChild(detallesLocal);
+                }
+                box.appendChild(local);
+
+                // RAG + OpenAI
+                const openai = document.createElement("div");
+                openai.className = "respuesta openai";
+                openai.innerHTML = `<div class='etiqueta'>✨ RAG + OpenAI</div><div>${resOpenAI.respuesta}</div>`;
+                if (resOpenAI.fragmentos && resOpenAI.fragmentos.length > 0) {
+                    const detallesOpen = document.createElement("details");
+                    detallesOpen.className = "contexto";
+                    detallesOpen.innerHTML = `<summary>📚 Fragmentos usados (RAG + OpenAI)</summary><pre>${resOpenAI.fragmentos.join("\n\n---\n\n")}</pre>`;
+                    openai.appendChild(detallesOpen);
+                }
+                box.appendChild(openai);
+
+            } catch (error) {
+                box.innerHTML = `<p style="color: red;">❌ Error al recuperar respuestas: ${error}</p>`;
+                console.error("❌ Error en fetch:", error);
+            }
         }
 
         document.getElementById("pregunta").addEventListener("keydown", function(e) {

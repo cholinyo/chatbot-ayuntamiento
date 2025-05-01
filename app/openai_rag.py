@@ -2,18 +2,23 @@
 
 """
 Este módulo permite combinar el sistema RAG local (con FAISS) con generación de texto
-vía OpenAI, usando los fragmentos recuperados como contexto. Integra logging detallado.
+vía OpenAI, usando el nuevo cliente compatible con openai>=1.0.0.
+El modelo puede cambiarse dinámicamente según una variable global elegida en el panel admin.
 """
 
 import os
 import logging
-import openai
 import numpy as np
 import time
+from openai import OpenAI
 from app.vector_indexing import documentos_indexados, modelo, index
+from app.index_storage import cargar_indice
 
-# Configurar la clave de API de OpenAI desde variable de entorno
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Configurar cliente OpenAI
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Modelo usado (por defecto)
+modelo_openai = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
 
 # Configurar logging
 logging.basicConfig(
@@ -24,6 +29,17 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+
+# Cargar índice FAISS desde disco si está disponible
+cargar_indice()
+
+def establecer_modelo(nombre_modelo: str):
+    global modelo_openai
+    modelo_openai = nombre_modelo
+    logging.info(f"🧠 Modelo OpenAI actualizado a: {modelo_openai}")
+
+def obtener_modelo():
+    return modelo_openai
 
 def obtener_top_k_fragmentos(pregunta: str, k: int = 3) -> list:
     if not documentos_indexados:
@@ -40,7 +56,7 @@ def obtener_top_k_fragmentos(pregunta: str, k: int = 3) -> list:
     logging.info(f"🔍 OpenAI RAG recuperó {len(fragmentos)} fragmentos para la pregunta: '{pregunta}'")
     return fragmentos
 
-def generar_respuesta_openai(pregunta: str, contexto: list[str]) -> str:
+def generar_respuesta_openai(pregunta: str, contexto: list[str]) -> tuple[str, float, str]:
     prompt = (
         "Usa la siguiente información para responder de forma clara y precisa.\n\n"
         "Contexto:\n" +
@@ -50,20 +66,20 @@ def generar_respuesta_openai(pregunta: str, contexto: list[str]) -> str:
 
     try:
         inicio = time.time()
-        respuesta = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        respuesta = client.chat.completions.create(
+            model=modelo_openai,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=400
         )
         duracion = time.time() - inicio
         mensaje = respuesta.choices[0].message.content.strip()
-        logging.info(f"[RAG+OpenAI] Pregunta: '{pregunta}' → Respuesta: '{mensaje[:100]}...' ({duracion:.2f}s)")
-        return mensaje, duracion
+        logging.info(f"[RAG+OpenAI] Modelo: {modelo_openai} | Pregunta: '{pregunta}' → Respuesta: '{mensaje[:100]}...' ({duracion:.2f}s)")
+        return mensaje, duracion, modelo_openai
 
     except Exception as e:
         logging.error(f"❌ Error con OpenAI: {e}")
-        return "⚠️ No se pudo generar una respuesta con el modelo de lenguaje.", 0
+        return "⚠️ No se pudo generar una respuesta con el modelo de lenguaje.", 0, "error"
 
 def consultar_rag_con_openai(pregunta: str) -> dict:
     contexto = obtener_top_k_fragmentos(pregunta, k=3)
@@ -74,8 +90,8 @@ def consultar_rag_con_openai(pregunta: str) -> dict:
             "fragmentos": []
         }
 
-    respuesta, duracion = generar_respuesta_openai(pregunta, contexto)
+    respuesta, duracion, modelo = generar_respuesta_openai(pregunta, contexto)
     return {
-        "respuesta": f"{respuesta}\n⏱️ Tiempo de respuesta: {duracion:.2f} segundos",
+        "respuesta": f"{respuesta}\n⏱️ Tiempo de respuesta: {duracion:.2f} segundos\n🤖 Modelo: {modelo}",
         "fragmentos": contexto
     }

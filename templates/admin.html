@@ -1,0 +1,94 @@
+<!-- templates/admin.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Panel de Administración</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h1>🛠️ Panel de Administración</h1>
+  <div class="admin-panel">
+
+    <section>
+      <h2>📥 INDEXACIÓN</h2>
+      <p>📅 Última indexación: <strong>{{ ultima_indexacion }}</strong></p>
+
+      <h3>🌐 Fuentes de indexación</h3>
+      <p><small>Formato sugerido por línea: <code>https://dominio.com | tipo=sitemap | max_paginas=50</code></small></p>
+      <textarea id="fuentes" rows="6" style="width:100%" placeholder="Una URL por línea con parámetros opcionales como tipo=dominio, sitemap o pagina.">{{ fuentes_cargadas }}</textarea>
+      <button onclick="guardarFuentes()">💾 Guardar fuentes</button>
+
+      <h3>🧱 Selectores HTML a extraer</h3>
+      <textarea id="selectores" rows="4" style="width:100%" placeholder="Ej: p, h1, h2">{{ selectores_cargados }}</textarea>
+      <button onclick="guardarSelectores()">💾 Guardar selectores</button>
+
+      <h3>📊 Estadísticas actuales</h3>
+      <ul>
+        <li>🔗 URLs indexadas únicas: <strong>{{ total_urls }}</strong></li>
+        <li>📄 Fragmentos indexados: <strong>{{ total_fragmentos }}</strong></li>
+        <li>🧭 URLs desde sitemaps: <strong>{{ total_urls_sitemap }}</strong></li>
+        <li>📝 URLs directas: <strong>{{ total_urls_directas }}</strong></li>
+      </ul>
+
+      <button onclick="reindexar()">🔄 Reindexar contenido</button>
+    </section>
+
+    <hr>
+
+    <section>
+      <h2>🧠 SELECCIÓN DE MODELO OPENAI</h2>
+      <label for="modelo">🤖 Modelo actual:</label>
+      <select id="modelo" onchange="cambiarModelo()">
+        <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+        <option value="gpt-4">gpt-4</option>
+      </select>
+    </section>
+
+    <div class="log" id="log"></div>
+
+  </div>
+
+  <script>
+    async function reindexar() {
+      document.getElementById("log").innerText = "Reindexando...";
+      const res = await fetch("/api/reindexar", { method: "POST" });
+      const data = await res.json();
+      document.getElementById("log").innerText = data.mensaje;
+    }
+
+    async function cambiarModelo() {
+      const modelo = document.getElementById("modelo").value;
+      const res = await fetch("/api/modelo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelo })
+      });
+      const data = await res.json();
+      document.getElementById("log").innerText = data.mensaje;
+    }
+
+    async function guardarFuentes() {
+      const contenido = document.getElementById("fuentes").value;
+      const res = await fetch("/api/fuentes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fuentes: contenido })
+      });
+      const data = await res.json();
+      document.getElementById("log").innerText = data.mensaje;
+    }
+
+    async function guardarSelectores() {
+      const contenido = document.getElementById("selectores").value;
+      const res = await fetch("/api/selectores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectores: contenido })
+      });
+      const data = await res.json();
+      document.getElementById("log").innerText = data.mensaje;
+    }
+  </script>
+</body>
+</html>
