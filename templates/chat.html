@@ -1,26 +1,106 @@
+<!-- templates/chat.html -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Chatbot Ayuntamiento</title>
+    <title>Asistente Ciudadano</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2em;
+            background: #f7f9fc;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        #chat-box {
+            width: 100%;
+            max-width: 800px;
+            margin: 1em auto;
+            padding: 1em;
+            background: #ffffff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            height: 400px;
+            overflow-y: scroll;
+        }
+        .mensaje {
+            margin: 0.5em 0;
+        }
+        .usuario {
+            font-weight: bold;
+            color: #2980b9;
+        }
+        .bot {
+            font-weight: bold;
+            color: #27ae60;
+        }
+        #input-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 1em;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 0.5em;
+            font-size: 1em;
+        }
+        button {
+            padding: 0.5em 1em;
+            font-size: 1em;
+            margin-left: 0.5em;
+        }
+    </style>
 </head>
 <body>
-    <h1>Asistente Ciudadano</h1>
-    <input id="pregunta" type="text" placeholder="Escribe tu pregunta...">
-    <button onclick="enviar()">Enviar</button>
-    <p id="respuesta"></p>
+    <h1>🤖 Asistente Ciudadano</h1>
+
+    <div id="chat-box"></div>
+
+    <div id="input-container">
+        <input type="text" id="pregunta" placeholder="Escribe tu pregunta..." autofocus>
+        <button onclick="enviarPregunta()">Enviar</button>
+    </div>
 
     <script>
-        async function enviar() {
-            const pregunta = document.getElementById('pregunta').value;
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({pregunta})
-            });
-            const data = await response.json();
-            document.getElementById('respuesta').textContent = data.respuesta;
+        async function enviarPregunta() {
+            const preguntaInput = document.getElementById("pregunta");
+            const pregunta = preguntaInput.value.trim();
+            if (!pregunta) return;
+
+            agregarAlChat("Tú", pregunta);
+            preguntaInput.value = "";
+
+            try {
+                const respuesta = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ pregunta })
+                }).then(r => r.json());
+
+                agregarAlChat("Bot", respuesta.respuesta);
+            } catch (error) {
+                agregarAlChat("Bot", "❌ Error al procesar la consulta.");
+                console.error(error);
+            }
         }
+
+        function agregarAlChat(autor, mensaje) {
+            const chatBox = document.getElementById("chat-box");
+            const div = document.createElement("div");
+            div.classList.add("mensaje");
+            div.innerHTML = `<span class="${autor === 'Tú' ? 'usuario' : 'bot'}">${autor}:</span> ${mensaje}`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Enviar con Enter
+        document.getElementById("pregunta").addEventListener("keydown", function(e) {
+            if (e.key === "Enter") enviarPregunta();
+        });
     </script>
 </body>
 </html>
