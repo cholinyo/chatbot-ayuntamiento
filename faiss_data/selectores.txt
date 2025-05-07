@@ -1,1 +1,1 @@
-h1, h2, p, h3, div, table, td, tr, h4
+h1, h2, p, h3, div, table, td, tr, h4, div.contenido, h1, h2, p

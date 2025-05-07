@@ -1,2 +1,3 @@
-https://onda.es | tipo=sitemap | max_paginas=50
-https://cpionda.es
+https://www.onda.es | tipo=dominio | max_paginas=30
+https://www.onda.es/sitemap.xml | tipo=sitemap
+https://www.onda.es/index.php?contenido=apartado&id_boto=14200 | tipo=pagina

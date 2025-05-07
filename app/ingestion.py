@@ -9,54 +9,78 @@ Usa requests y BeautifulSoup para hacer scraping básico y limpio.
 import requests
 from bs4 import BeautifulSoup
 
-def extraer_texto_web(url: str, selectores: list = None) -> list:
-    """
-    Extrae texto de una página web y lo convierte en fragmentos indexables.
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
-    Parámetros:
-        url (str): URL de la página web municipal a raspar
-        selectores (list): lista opcional de etiquetas HTML a conservar 
-                           (por defecto: ['p', 'h1', 'h2'])
+def extraer_texto_web(url: str, selectores: list) -> list:
+    def analizar_con_bs(html: str, origen: str) -> list:
+        soup = BeautifulSoup(html, 'html.parser')
+        fragmentos = []
+        for selector in selectores:
+            elementos = soup.select(selector)
+            for el in elementos:
+                texto = el.get_text(separator=" ", strip=True)
+                if texto:
+                    fragmentos.append(texto)
+        print(f"   • {origen}: {len(fragmentos)} fragmentos extraídos con {', '.join(selectores)}")
+        return fragmentos
 
-    Retorna:
-        list: fragmentos limpios de texto extraído
-    """
     try:
+        # Primer intento: requests
+        print(f"🌐 Descargando (requests): {url}")
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        html = response.text
 
-        soup = BeautifulSoup(html, 'html.parser')
+        # Detectar redirección por <meta http-equiv="refresh">
+        soup = BeautifulSoup(response.text, 'html.parser')
+        refresh = soup.find("meta", attrs={"http-equiv": "refresh"})
+        if refresh and "URL=" in refresh.get("content", ""):
+            redir_url = refresh["content"].split("URL=")[-1].strip()
+            url = urljoin(url, redir_url)
+            print(f"🔁 Redireccionando a: {url}")
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
 
-        # Etiquetas por defecto si no se especifican
-        if selectores is None:
-            selectores = ['p', 'h1', 'h2']
+        # Intentar extracción con BeautifulSoup
+        fragmentos = analizar_con_bs(response.text, "BeautifulSoup")
+        if fragmentos:
+            return fragmentos
 
-        fragmentos = []
-        total_por_etiqueta = {}
+    except Exception as e:
+        print(f"⚠️ Error con requests: {e}")
 
-        for tag in selectores:
-            elementos = soup.find_all(tag)
-            total_por_etiqueta[tag] = 0
-            for elemento in elementos:
-                texto = elemento.get_text(strip=True)
-                if texto and len(texto) > 30:  # Ignora fragmentos muy cortos
-                    fragmentos.append(texto)
-                    total_por_etiqueta[tag] += 1
+    # Plan B: Selenium si no se extrajo nada o hubo error
+    try:
+        print(f"🚗 Cargando con Selenium: {url}")
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
 
-        print(f"🔍 {url} → {len(fragmentos)} fragmentos extraídos.")
-        for etiqueta, cantidad in total_por_etiqueta.items():
-            print(f"   • {etiqueta}: {cantidad} fragmentos")
+        driver = webdriver.Chrome(options=options)
+        driver.get(url)
+        html = driver.page_source
+        driver.quit()
 
+        fragmentos = analizar_con_bs(html, "Selenium")
         return fragmentos
 
     except Exception as e:
-        print(f"❌ Error al procesar la URL {url}: {e}")
+        print(f"❌ Selenium falló: {e}")
         return []
 
-# Prueba manual del módulo (ejecutable directo)
+
+# Prueba manual del módulo
 if __name__ == "__main__":
-    url = "https://www.onda.es/"
-    fragmentos = extraer_texto_web(url, selectores=['p', 'h1', 'h2', 'article', 'section', 'div'])
+    url = "https://www.onda.es/noticias/actualidad"
+    fragmentos = extraer_texto_web(
+        url,
+        selectores=['p', 'h1', 'h2', 'article', 'section', 'li']
+    )
+
+    print(f"\nFragmentos extraídos: {len(fragmentos)}")
     for i, f in enumerate(fragmentos[:5]):
-        print(f"\nFragmento {i+1}:\n{f}")
+        print(f"\n--- Fragmento {i+1} ---\n{f}")

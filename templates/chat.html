@@ -1,59 +1,60 @@
-<!-- templates/chat.html -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Asistente Ciudadano</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8">
+  <title>Chatbot Ciudadano</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    #respuesta, #historial { white-space: pre-wrap; margin-top: 1em; }
+    #historial { background: #f8f8f8; padding: 1em; border-radius: 6px; border: 1px solid #ccc; max-height: 400px; overflow-y: auto; }
+    .usuario { color: navy; font-weight: bold; }
+    .bot { color: green; margin-bottom: 1em; }
+  </style>
 </head>
 <body>
-    <h1>🤖 Asistente Ciudadano</h1>
+  <h1>🤖 Chatbot del Ayuntamiento</h1>
 
-    <div id="chat-box"></div>
+  <form id="formulario">
+    <input type="text" id="pregunta" name="pregunta" style="width: 60%;" placeholder="Escribe tu pregunta..." required>
+    <button type="submit">Enviar</button>
+  </form>
 
-    <div id="input-container">
-        <input type="text" id="pregunta" placeholder="Escribe tu pregunta..." autofocus>
-        <button onclick="enviarPregunta()">Enviar</button>
-    </div>
+  <div id="respuesta"></div>
 
-    <script>
-        async function enviarPregunta() {
-            const preguntaInput = document.getElementById("pregunta");
-            const pregunta = preguntaInput.value.trim();
-            if (!pregunta) return;
+  <h2>🕘 Historial</h2>
+  <div id="historial"></div>
 
-            agregarAlChat("Tú", pregunta);
-            preguntaInput.value = "";
+  <script>
+    const form = document.getElementById("formulario");
+    const input = document.getElementById("pregunta");
+    const output = document.getElementById("respuesta");
+    const historial = document.getElementById("historial");
 
-            try {
-                const respuesta = await fetch("/api/chat", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ pregunta })
-                }).then(r => r.json());
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pregunta = input.value;
+      output.textContent = "⏳ Pensando...";
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pregunta })
+      });
+      const data = await res.json();
+      const respuesta = data.respuesta;
 
-                agregarAlChat("Bot", respuesta.respuesta);
-            } catch (error) {
-                agregarAlChat("Bot", "❌ Error al procesar la consulta.");
-                console.error(error);
-            }
-        }
+      // Mostrar respuesta actual
+      output.textContent = respuesta;
 
-        function agregarAlChat(autor, mensaje) {
-            const chatBox = document.getElementById("chat-box");
-            const div = document.createElement("div");
-            div.classList.add("mensaje");
-            div.innerHTML = `<span class="${autor === 'Tú' ? 'usuario' : 'bot'}">${autor}:</span> ${mensaje}`;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
+      // Añadir al historial
+      const entrada = `
+        🧑‍💼 <span class="usuario">${pregunta}</span><br>
+        🤖 <span class="bot">${respuesta}</span>
+        <hr>
+      `;
+      historial.innerHTML = entrada + historial.innerHTML;
 
-        // Enviar con Enter
-        document.getElementById("pregunta").addEventListener("keydown", function(e) {
-            if (e.key === "Enter") enviarPregunta();
-        });
-    </script>
+      input.value = "";
+    });
+  </script>
 </body>
 </html>

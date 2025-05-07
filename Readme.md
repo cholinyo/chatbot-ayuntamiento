@@ -22,7 +22,7 @@ Este proyecto implementa un **chatbot de asistencia ciudadana**, diseñado para 
 | Web backend | **Flask** | Ligero, flexible y adecuado para apps RESTful seguras |
 | Generación de embeddings | **Sentence Transformers** (`all-MiniLM-L6-v2`) | Rápido, preciso y ejecutable localmente |
 | Vector DB (retrieval) | **FAISS** | Almacenamiento y recuperación de vectores eficiente y local |
-| LLM (a integrar) | OpenAI / Llama2 / Mistral (opcional) | Dependiendo del entorno: nube o local |
+| LLM externo | **OpenAI (GPT-4)** | Dependiendo del entorno: nube o local |
 | Ingesta de sitios web | BeautifulSoup + requests | Permite raspar contenido de webs del Ayuntamiento |
 | Crawling automático | Código propio (`domain_crawler.py`) | Rastrea páginas internas de un dominio limitado |
 | Variables de configuración | `.env` + `python-dotenv` | Permite cambiar el dominio sin editar código |
@@ -41,10 +41,13 @@ chatbot-ayuntamiento/
 │   ├── rag_engine.py          # Módulo de RAG con FAISS
 │   ├── ingestion.py           # Módulo de carga de datos desde webs municipales
 │   ├── vector_indexing.py     # Vectorización y búsqueda semántica
+│   ├── openai_rag.py           # Comparador RAG + GPT-4 (API moderna)
 │   ├── domain_crawler.py      # Rastreo de URLs internas del dominio municipal
 │   └── api_loader.py          # (próximo) Conexión a API de trámites administrativos
 ├── templates/
-│   └── chat.html              # Interfaz de usuario web
+│   ├── chat.html              # Chat clásico (sólo RAG local)
+│   ├── chat_openai.html        # Comparativa RAG local vs GPT-4
+│   └── admin.html              # Panel de administración
 ├── static/                    # CSS y JS (opcional)
 ├── .env                       # Configuración del dominio (ej. DOMINIO_AYUNTAMIENTO)
 ├── venv/                      # Entorno virtual (no incluido en repo)
@@ -83,7 +86,7 @@ venv\Scripts\activate    # En Windows
 
 3. Crea un archivo `.env` en la raíz del proyecto con el dominio del Ayuntamiento:
 ```
-DOMINIO_AYUNTAMIENTO=https://www.onda.es
+OPENAI_API_KEY=sk-...  # Tu clave OpenAI
 ```
 
 4. Instala las dependencias:
@@ -104,9 +107,19 @@ python app.py
 7. Accede desde el navegador a:
 ```
 http://localhost:5000
+http://localhost:5000/comparativa  # Comparador
+http://localhost:5000/admin        # Panel
 ```
 
 ---
+
+## 🔄 Funcionalidades actuales
+
+- [x] Indexación desde URLs, sitemaps o dominios vía `/admin`
+- [x] Selectores configurables desde archivo o panel
+- [x] Comparativa RAG local vs GPT-4 con OpenAI API moderna
+- [x] API `openai>=1.0.0` con cliente `OpenAI()` y soporte para GPT-4
+- [x] Interfaz clara para administración, selección de modelo y logging
 
 ## 🔄 Futuras ampliaciones
 

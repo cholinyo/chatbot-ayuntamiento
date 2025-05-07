@@ -1,97 +1,45 @@
-# app/openai_rag.py
-
-"""
-Este módulo permite combinar el sistema RAG local (con FAISS) con generación de texto
-vía OpenAI, usando el nuevo cliente compatible con openai>=1.0.0.
-El modelo puede cambiarse dinámicamente según una variable global elegida en el panel admin.
-"""
-
+# NUEVA API compatible con openai>=1.0.0
 import os
-import logging
-import numpy as np
-import time
+import openai
 from openai import OpenAI
-from app.vector_indexing import documentos_indexados, modelo, index
-from app.index_storage import cargar_indice
+from dotenv import load_dotenv
+from app.utils.faiss_index import buscar_similares
 
-# Configurar cliente OpenAI
+load_dotenv()
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+modelo_actual = "gpt-4"
 
-# Modelo usado (por defecto)
-modelo_openai = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+def establecer_modelo(nombre: str):
+    global modelo_actual
+    modelo_actual = nombre
 
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler("chatbot.log"),
-        logging.StreamHandler()
-    ]
-)
+def consultar_openai_rag(pregunta: str, top_k: int = 3) -> dict:
+    fragmentos = buscar_similares(pregunta, top_k)
+    contexto = "\n\n".join([f"- {f['texto']}" for f in fragmentos])
+    prompt = f"""Eres un asistente del Ayuntamiento. Responde de forma clara y directa usando solo la información siguiente:
 
-# Cargar índice FAISS desde disco si está disponible
-cargar_indice()
+{contexto}
 
-def establecer_modelo(nombre_modelo: str):
-    global modelo_openai
-    modelo_openai = nombre_modelo
-    logging.info(f"🧠 Modelo OpenAI actualizado a: {modelo_openai}")
-
-def obtener_modelo():
-    return modelo_openai
-
-def obtener_top_k_fragmentos(pregunta: str, k: int = 3) -> list:
-    if not documentos_indexados:
-        return []
-
-    pregunta_embedding = modelo.encode([pregunta])
-    _, indices = index.search(np.array(pregunta_embedding), k)
-
-    fragmentos = []
-    for idx in indices[0]:
-        if idx < len(documentos_indexados):
-            fragmentos.append(documentos_indexados[idx])
-
-    logging.info(f"🔍 OpenAI RAG recuperó {len(fragmentos)} fragmentos para la pregunta: '{pregunta}'")
-    return fragmentos
-
-def generar_respuesta_openai(pregunta: str, contexto: list[str]) -> tuple[str, float, str]:
-    prompt = (
-        "Usa la siguiente información para responder de forma clara y precisa.\n\n"
-        "Contexto:\n" +
-        "\n".join(f"- {frag}" for frag in contexto) +
-        f"\n\nPregunta: {pregunta}\nRespuesta:"
-    )
+Pregunta: {pregunta}
+Respuesta:"""
 
     try:
-        inicio = time.time()
-        respuesta = client.chat.completions.create(
-            model=modelo_openai,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=400
+        response = client.chat.completions.create(
+            model=modelo_actual,
+            messages=[
+                {"role": "system", "content": "Eres un asistente del Ayuntamiento que responde solo con la información proporcionada."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2
         )
-        duracion = time.time() - inicio
-        mensaje = respuesta.choices[0].message.content.strip()
-        logging.info(f"[RAG+OpenAI] Modelo: {modelo_openai} | Pregunta: '{pregunta}' → Respuesta: '{mensaje[:100]}...' ({duracion:.2f}s)")
-        return mensaje, duracion, modelo_openai
-
-    except Exception as e:
-        logging.error(f"❌ Error con OpenAI: {e}")
-        return "⚠️ No se pudo generar una respuesta con el modelo de lenguaje.", 0, "error"
-
-def consultar_rag_con_openai(pregunta: str) -> dict:
-    contexto = obtener_top_k_fragmentos(pregunta, k=3)
-    if not contexto:
-        logging.warning(f"⚠️ Sin contexto disponible para: '{pregunta}'")
         return {
-            "respuesta": "⚠️ No hay suficiente contexto disponible para responder.",
+            "respuesta": response.choices[0].message.content.strip(),
+            "fragmentos": [f["texto"] for f in fragmentos]
+        }
+    except Exception as e:
+        print("❌ Error en OpenAI:", e)
+        return {
+            "respuesta": f"❌ Error al contactar con OpenAI: {e}",
             "fragmentos": []
         }
-
-    respuesta, duracion, modelo = generar_respuesta_openai(pregunta, contexto)
-    return {
-        "respuesta": f"{respuesta}\n⏱️ Tiempo de respuesta: {duracion:.2f} segundos\n🤖 Modelo: {modelo}",
-        "fragmentos": contexto
-    }

@@ -1,9 +1,10 @@
 # app/routes_admin.py
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, render_template
 from app.rag_engine import ejecutar_indexacion_local
-from app.index_storage import guardar_indice
+from app.utils.faiss_index import guardar_indice, metadata
 from app.openai_rag import establecer_modelo
+from app.domain_crawler import obtener_urls_desde_sitemap
 from datetime import datetime
 import os
 
@@ -14,15 +15,16 @@ def reindexar():
     total = ejecutar_indexacion_local()
     guardar_indice()
 
+    # Guardar timestamp
     ruta = "faiss_data/last_index.txt"
     fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     os.makedirs(os.path.dirname(ruta), exist_ok=True)
-    with open(ruta, "w") as f:
+    with open(ruta, "w", encoding="utf-8") as f:
         f.write(fecha)
 
     return jsonify({
         "status": "ok",
-        "mensaje": f"Se indexaron {total} fragmentos y se guardó el índice. ({fecha})"
+        "mensaje": f"✅ Se indexaron {total} fragmentos y se guardó el índice. ({fecha})"
     })
 
 @admin.route("/modelo", methods=["POST"])
@@ -54,6 +56,7 @@ def guardar_selectores():
 
 @admin.route("/admin")
 def admin_panel():
+    # Cargar textos guardados
     timestamp_path = "faiss_data/last_index.txt"
     fuentes_path = "faiss_data/fuentes.txt"
     selectores_path = "faiss_data/selectores.txt"
@@ -73,44 +76,13 @@ def admin_panel():
         with open(selectores_path, encoding="utf-8") as f:
             selectores = f.read()
 
-    total_urls = 0
-    total_fragmentos = 0
-    try:
-        from app.vector_indexing import documentos_indexados, origen_fragmentos
-        total_fragmentos = len(documentos_indexados)
-        total_urls = len(set(origen_fragmentos.values()))
-    except Exception as e:
-        print("[admin] Error contando estadísticas:", e)
+    # Estadísticas
+    total_fragmentos = len(metadata)
+    urls = [m["origen"] for m in metadata]
+    total_urls = len(set(urls))
+    total_urls_sitemap = sum(1 for u in urls if "sitemap" in u.lower())
+    total_urls_directas = sum(1 for u in urls if "id_boto=" in u or "index.php" in u)
 
-    total_urls_sitemap = 0
-    total_urls_directas = 0
-    try:
-        from app.domain_crawler import obtener_urls_desde_sitemap
-        for line in fuentes.splitlines():
-            if "#" in line or not line.strip():
-                continue
-            parts = [p.strip() for p in line.split("|") if p.strip()]
-            url = parts[0]
-            tipo = "pagina"
-            maxp = 50
-            for p in parts[1:]:
-                if p.startswith("tipo="):
-                    tipo = p.split("=")[1].strip()
-                if p.startswith("max_paginas="):
-                    try:
-                        maxp = int(p.split("=")[1])
-                    except: pass
-            if tipo == "sitemap":
-                try:
-                    urls = obtener_urls_desde_sitemap(url, dominio_filtrado=None, max_paginas=maxp)
-                    total_urls_sitemap += len(urls)
-                except: pass
-            elif tipo == "pagina":
-                total_urls_directas += 1
-    except Exception as e:
-        print("[admin] Error contando URLs:", e)
-
-    from flask import render_template
     return render_template("admin.html",
         ultima_indexacion=ultima,
         fuentes_cargadas=fuentes,

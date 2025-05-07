@@ -1,33 +1,25 @@
 # app/rag_engine.py
 
-"""
-Este módulo implementa la función consultar_rag(pregunta)
-y la función ejecutar_indexacion_local() que indexa fuentes configuradas manualmente.
-Cada fuente puede incluir '| tipo=sitemap | max_paginas=NUM' y los selectores se leen desde 'faiss_data/selectores.txt'
-"""
-
 import os
 import logging
+import sys
 import time
+from app.utils.faiss_index import indexar_contenido, buscar_similares, cargar_indice, metadata
 from app.domain_crawler import obtener_urls_desde_sitemap, crawl_dominio
 from app.ingestion import extraer_texto_web
-from app.vector_indexing import indexar_fragmentos, buscar_fragmento_relevante
-from app.index_storage import cargar_indice
 
-# Configuración de logging
+# Configuración de logging con soporte para emojis
 logging.basicConfig(
     level=logging.INFO,
+    stream=sys.stdout,
     format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler("chatbot.log"),
-        logging.StreamHandler()
-    ]
+    encoding='utf-8'
 )
 
-# Cargar índice existente
+# Cargar índice FAISS al iniciar
 cargar_indice()
 
-# Leer selectores configurables desde archivo editable
+# Cargar selectores desde archivo (editable)
 ruta_selectores = "faiss_data/selectores.txt"
 SELECTORES_AMPLIOS = ['p', 'h1', 'h2', 'h3', 'article', 'section', 'div']
 if os.path.exists(ruta_selectores):
@@ -35,13 +27,7 @@ if os.path.exists(ruta_selectores):
         SELECTORES_AMPLIOS = [line.strip() for line in f if line.strip() and not line.startswith("#")]
     logging.info(f"📌 Selectores personalizados cargados: {SELECTORES_AMPLIOS}")
 
-
 def ejecutar_indexacion_local() -> int:
-    """
-    Ejecuta el proceso completo de extracción e indexación
-    desde las fuentes almacenadas en faiss_data/fuentes.txt
-    Cada línea puede incluir '| tipo=sitemap | max_paginas=NUM'
-    """
     total_fragmentos = 0
     ruta_fuentes = "faiss_data/fuentes.txt"
 
@@ -60,13 +46,14 @@ def ejecutar_indexacion_local() -> int:
 
         for p in partes[1:]:
             if p.startswith("tipo="):
-                tipo = p.replace("tipo=", "").strip()
+                tipo = p.split("=")[1].strip()
             elif p.startswith("max_paginas="):
                 try:
-                    max_paginas = int(p.replace("max_paginas=", "").strip())
+                    max_paginas = int(p.split("=")[1].strip())
                 except ValueError:
                     pass
 
+        # Resolver las URLs a procesar
         if tipo == "sitemap":
             urls = obtener_urls_desde_sitemap(url, dominio_filtrado=None, max_paginas=max_paginas)
             logging.info(f"🌐 Sitemap: {url} → {len(urls)} páginas detectadas")
@@ -77,11 +64,15 @@ def ejecutar_indexacion_local() -> int:
             urls = [url]
             logging.info(f"📄 URL directa: {url}")
 
+        # Extraer e indexar
         for u in urls:
             fragmentos = extraer_texto_web(u, selectores=SELECTORES_AMPLIOS)
-            count = indexar_fragmentos(fragmentos, u)
-            total_fragmentos += count
-            logging.info(f"✅ {count} fragmentos indexados desde: {u}")
+            if fragmentos:
+                indexar_contenido(fragmentos, origen=u)
+                total_fragmentos += len(fragmentos)
+                logging.info(f"✅ {len(fragmentos)} fragmentos indexados desde: {u}")
+            else:
+                logging.info(f"⚠️ 0 fragmentos desde: {u}")
 
     logging.info(f"📚 Total indexado en esta sesión: {total_fragmentos}")
     return total_fragmentos
@@ -89,7 +80,11 @@ def ejecutar_indexacion_local() -> int:
 
 def consultar_rag(pregunta: str) -> str:
     inicio = time.time()
-    fragmento = buscar_fragmento_relevante(pregunta)
+    resultados = buscar_similares(pregunta, top_k=1)
     duracion = time.time() - inicio
-    logging.info(f"[RAG local] Pregunta: '{pregunta}' → Respuesta: '{fragmento[:100]}...' ({duracion:.2f}s)")
-    return f"🤖 Según el contenido oficial: {fragmento}\n⏱️ Tiempo de respuesta: {duracion:.2f} segundos"
+
+    if not resultados:
+        return "🤖 Lo siento, no encontré información relacionada."
+
+    fragmento = resultados[0]['texto']
+    return f"🤖 Según el contenido oficial:\n{fragmento}\n⏱️ Tiempo de respuesta: {duracion:.2f} segundos"

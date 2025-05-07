@@ -1,18 +1,33 @@
-<!-- templates/chat_openai.html -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <title>Comparativa RAG Local vs OpenAI</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        #chat-box { margin-top: 2em; }
+        .respuesta { margin-bottom: 2em; padding: 1em; border-radius: 6px; }
+        .local { background: #e7f7ff; }
+        .openai { background: #f5f5f5; }
+        .etiqueta { font-weight: bold; margin-bottom: .5em; }
+        .contexto { font-size: .9em; margin-top: 1em; }
+        #historial { background: #fafafa; border: 1px solid #ccc; padding: 1em; margin-top: 2em; max-height: 300px; overflow-y: auto; }
+        .usuario { color: navy; font-weight: bold; }
+        .bot { color: green; }
+    </style>
 </head>
 <body>
-    <h1>Comparativa RAG Local vs RAG+OpenAI</h1>
-    <div id="chat-box"></div>
+    <h1>Comparativa RAG Local vs RAG + OpenAI</h1>
+
     <div id="input">
-        <input type="text" id="pregunta" placeholder="Haz tu pregunta...">
+        <input type="text" id="pregunta" placeholder="Haz tu pregunta..." style="width: 60%;">
         <button onclick="consultar()">Consultar</button>
     </div>
+
+    <div id="chat-box"></div>
+
+    <h2>🕘 Historial</h2>
+    <div id="historial"></div>
 
     <script>
         async function consultar() {
@@ -20,53 +35,67 @@
             if (!pregunta) return;
 
             const box = document.getElementById("chat-box");
+            const historial = document.getElementById("historial");
             box.innerHTML = "<p><em>Cargando respuestas...</em></p>";
 
+            const preguntaHTML = `
+                🧑‍💼 <span class="usuario">${pregunta}</span><br>
+            `;
+
             try {
-                const [resLocal, resOpenAI] = await Promise.all([
+                const [resLocal, resOpenAI] = await Promise.allSettled([
                     fetch("/api/chat", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ pregunta })
-                    }).then(res => res.ok ? res.json() : Promise.reject("RAG local falló")),
+                    }).then(res => res.json()),
 
                     fetch("/api/chat_openai", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ pregunta })
-                    }).then(res => res.ok ? res.json() : Promise.reject("OpenAI falló"))
+                    }).then(res => res.json())
                 ]);
 
                 box.innerHTML = "";
 
-                // RAG Local
-                const local = document.createElement("div");
-                local.className = "respuesta local";
-                local.innerHTML = `<div class='etiqueta'>🧠 RAG Local</div><div>${resLocal.respuesta}</div>`;
-                if (resLocal.fragmentos && resLocal.fragmentos.length > 0) {
-                    const detallesLocal = document.createElement("details");
-                    detallesLocal.className = "contexto";
-                    detallesLocal.innerHTML = `<summary>📄 Fragmentos usados (RAG Local)</summary><pre>${resLocal.fragmentos.join("\n\n---\n\n")}</pre>`;
-                    local.appendChild(detallesLocal);
+                if (resLocal.status === "fulfilled") {
+                    const local = document.createElement("div");
+                    local.className = "respuesta local";
+                    local.innerHTML = `<div class='etiqueta'>🧠 RAG Local</div><div>${resLocal.value.respuesta}</div>`;
+                    if (resLocal.value.fragmentos?.length > 0) {
+                        const detalles = document.createElement("details");
+                        detalles.className = "contexto";
+                        detalles.innerHTML = `<summary>📄 Fragmentos usados (Local)</summary><pre>${resLocal.value.fragmentos.join("\n\n---\n\n")}</pre>`;
+                        local.appendChild(detalles);
+                    }
+                    box.appendChild(local);
+                    historial.innerHTML = preguntaHTML + `🤖 <span class="bot">${resLocal.value.respuesta}</span><hr>` + historial.innerHTML;
+                } else {
+                    box.innerHTML += `<p style="color: red;">❌ Error en RAG Local</p>`;
                 }
-                box.appendChild(local);
 
-                // RAG + OpenAI
-                const openai = document.createElement("div");
-                openai.className = "respuesta openai";
-                openai.innerHTML = `<div class='etiqueta'>✨ RAG + OpenAI</div><div>${resOpenAI.respuesta}</div>`;
-                if (resOpenAI.fragmentos && resOpenAI.fragmentos.length > 0) {
-                    const detallesOpen = document.createElement("details");
-                    detallesOpen.className = "contexto";
-                    detallesOpen.innerHTML = `<summary>📚 Fragmentos usados (RAG + OpenAI)</summary><pre>${resOpenAI.fragmentos.join("\n\n---\n\n")}</pre>`;
-                    openai.appendChild(detallesOpen);
+                if (resOpenAI.status === "fulfilled") {
+                    const openai = document.createElement("div");
+                    openai.className = "respuesta openai";
+                    openai.innerHTML = `<div class='etiqueta'>✨ RAG + OpenAI</div><div>${resOpenAI.value.respuesta}</div>`;
+                    if (resOpenAI.value.fragmentos?.length > 0) {
+                        const detalles = document.createElement("details");
+                        detalles.className = "contexto";
+                        detalles.innerHTML = `<summary>📚 Fragmentos usados (OpenAI)</summary><pre>${resOpenAI.value.fragmentos.join("\n\n---\n\n")}</pre>`;
+                        openai.appendChild(detalles);
+                    }
+                    box.appendChild(openai);
+                } else {
+                    box.innerHTML += `<p style="color: red;">❌ Error en RAG + OpenAI</p>`;
                 }
-                box.appendChild(openai);
 
             } catch (error) {
-                box.innerHTML = `<p style="color: red;">❌ Error al recuperar respuestas: ${error}</p>`;
+                box.innerHTML = `<p style="color: red;">❌ Error general: ${error}</p>`;
                 console.error("❌ Error en fetch:", error);
             }
+
+            document.getElementById("pregunta").value = "";
         }
 
         document.getElementById("pregunta").addEventListener("keydown", function(e) {
