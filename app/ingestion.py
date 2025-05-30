@@ -1,86 +1,69 @@
-# app/ingestion.py
+# app/ingestion.py actualizado con Selenium y fallback
 
-"""
-Este módulo permite extraer contenido textual útil desde una página web oficial
-del Ayuntamiento, para su posterior vectorización e indexación.
-Usa requests y BeautifulSoup para hacer scraping básico y limpio.
-"""
-
-import requests
 from bs4 import BeautifulSoup
-
 import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from typing import List
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import WebDriverException
+import logging
 
-def extraer_texto_web(url: str, selectores: list) -> list:
-    def analizar_con_bs(html: str, origen: str) -> list:
-        soup = BeautifulSoup(html, 'html.parser')
-        fragmentos = []
-        for selector in selectores:
-            elementos = soup.select(selector)
-            for el in elementos:
-                texto = el.get_text(separator=" ", strip=True)
-                if texto:
-                    fragmentos.append(texto)
-        print(f"   • {origen}: {len(fragmentos)} fragmentos extraídos con {', '.join(selectores)}")
-        return fragmentos
+MIN_LONGITUD_FRAGMENTO = 30  # caracteres mínimos por fragmento
 
+# Función principal
+
+def extraer_texto_web(url: str, selectores: List[str] = None) -> List[str]:
+    if selectores is None:
+        selectores = ['p', 'h1', 'h2', 'h3', 'article', 'section', 'div']
+
+    html = obtener_html_con_selenium(url)
+    if html is None:
+        html = obtener_html_con_requests(url)
+
+    if html is None:
+        logging.warning(f"❌ No se pudo obtener contenido de: {url}")
+        return []
+
+    return extraer_fragmentos(html, selectores)
+
+
+def obtener_html_con_requests(url: str) -> str:
     try:
-        # Primer intento: requests
-        print(f"🌐 Descargando (requests): {url}")
-        response = requests.get(url, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
-
-        # Detectar redirección por <meta http-equiv="refresh">
-        soup = BeautifulSoup(response.text, 'html.parser')
-        refresh = soup.find("meta", attrs={"http-equiv": "refresh"})
-        if refresh and "URL=" in refresh.get("content", ""):
-            redir_url = refresh["content"].split("URL=")[-1].strip()
-            url = urljoin(url, redir_url)
-            print(f"🔁 Redireccionando a: {url}")
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-
-        # Intentar extracción con BeautifulSoup
-        fragmentos = analizar_con_bs(response.text, "BeautifulSoup")
-        if fragmentos:
-            return fragmentos
-
+        return response.text
     except Exception as e:
-        print(f"⚠️ Error con requests: {e}")
+        logging.warning(f"⚠️ Error con requests en {url}: {e}")
+        return None
 
-    # Plan B: Selenium si no se extrajo nada o hubo error
+
+def obtener_html_con_selenium(url: str) -> str:
     try:
-        print(f"🚗 Cargando con Selenium: {url}")
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
 
-        driver = webdriver.Chrome(options=options)
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(15)
         driver.get(url)
         html = driver.page_source
         driver.quit()
-
-        fragmentos = analizar_con_bs(html, "Selenium")
-        return fragmentos
-
-    except Exception as e:
-        print(f"❌ Selenium falló: {e}")
-        return []
+        return html
+    except WebDriverException as e:
+        logging.warning(f"⚠️ Selenium no pudo procesar {url}: {e}")
+        return None
 
 
-# Prueba manual del módulo
-if __name__ == "__main__":
-    url = "https://www.onda.es/noticias/actualidad"
-    fragmentos = extraer_texto_web(
-        url,
-        selectores=['p', 'h1', 'h2', 'article', 'section', 'li']
-    )
-
-    print(f"\nFragmentos extraídos: {len(fragmentos)}")
-    for i, f in enumerate(fragmentos[:5]):
-        print(f"\n--- Fragmento {i+1} ---\n{f}")
+def extraer_fragmentos(html: str, selectores: List[str]) -> List[str]:
+    soup = BeautifulSoup(html, 'html.parser')
+    fragmentos = []
+    for selector in selectores:
+        elementos = soup.select(selector)
+        for el in elementos:
+            texto = el.get_text(strip=True)
+            if len(texto) >= MIN_LONGITUD_FRAGMENTO:
+                fragmentos.append(texto)
+    return fragmentos
